@@ -1,0 +1,67 @@
+#!/usr/bin/env ruby
+
+require 'pp'
+
+module Apache
+  module Log
+    class Entry
+      attr_accessor :method
+      attr_accessor :url
+      attr_accessor :status
+      attr_accessor :size
+  
+      def initialize(params)
+        params.each do |k,v|
+          self.send("#{k}=", v)
+        end
+      end      
+    end
+
+    class List
+      def initialize
+        @items = []
+      end
+      
+      def read(filename)
+        File.open(filename, 'r').each do |line|
+          if line =~ /"(GET|POST) ([^ ]+).*?" (\d+) (\d+)/
+            entry = Entry.new(:method => $1, :url => $2, :status => $3, :size => $4)
+            @items << entry
+          end
+        end
+      end
+      
+      def to_url_size_hash
+        hash = {}
+        @items.each do |item|
+          if hash[item.url].nil? || hash[item.url].to_i < item.size.to_i
+            hash[item.url] = item.size.to_i
+          end
+        end
+        hash
+      end
+      
+      def top_size(number)
+        items = to_url_size_hash
+        items.sort {|a,b| a[1] <=> b[1]}.reverse[0..number]
+      end
+      
+    end
+  end
+end
+
+#--------------------------------------------------------------------------------
+
+filename = ARGV[0]
+list = Apache::Log::List.new
+list.read(filename)
+
+top_10 = list.top_size(100)
+puts "Top 10 URLs by size".upcase
+puts
+puts "%-40s %19s" % ["URL", "Size/B"]
+puts "-" * 60
+top_10.each do |url,size|
+  puts "%-40s %19s" % [url, size.to_s]
+end
+

@@ -1,0 +1,126 @@
+#!/usr/bin/env ruby
+
+require 'rubygems'
+require 'progressbar'
+require 'gruff'
+
+module FDJ
+  module Monitor
+    class Entry
+      attr_accessor :date
+      attr_accessor :passenger_children
+      attr_accessor :passenger_max
+      attr_accessor :passenger_active
+      attr_accessor :passenger_inactive
+      attr_accessor :passenger_queue
+      attr_accessor :mem_used
+      attr_accessor :load_average
+      attr_accessor :io
+      attr_accessor :memcached_current
+      attr_accessor :memcached_max
+  
+      def initialize(params)
+        self.date = params.shift
+        self.passenger_children = params.shift
+        self.passenger_max = params.shift
+        self.passenger_active = params.shift
+        self.passenger_inactive = params.shift
+        self.passenger_queue = params.shift
+        self.mem_used = params.shift
+        self.load_average = params.shift
+        self.io = params.shift
+        self.memcached_current = params.shift
+        self.memcached_max = params.shift
+      end      
+    end
+
+    class List
+      attr_reader :items
+      
+      def initialize
+        @items = []
+      end
+      
+      def read(filename)
+        lines = `wc -l #{filename}`.to_i
+        pbar = ProgressBar.new("Analysing", lines)
+        
+        first = true
+        File.open(filename, 'r').each do |line|
+          if first
+            first = false
+            next
+          end
+          
+          @items << Entry.new(line.split(','))
+          pbar.inc
+        end
+        pbar.finish
+      end
+      
+      def to_url_size_hash
+        hash = {}
+        @items.each do |item|
+          if hash[item.url].nil? || hash[item.url].to_i < item.size.to_i
+            hash[item.url] = item.size.to_i
+          end
+        end
+        hash
+      end
+      
+      def top_size(number)
+        items = to_url_size_hash
+        items.sort {|a,b| a[1] <=> b[1]}.reverse[0..number]
+      end
+      
+    end
+  end
+end
+
+#--------------------------------------------------------------------------------
+
+filename = ARGV[0]
+list = FDJ::Monitor::List.new
+list.read(filename)
+
+g = Gruff::Line.new(800)
+g.title = "Passenger Children"
+g.data("Max", list.items.collect {|e| e.passenger_max.to_i } )
+g.data("Current", list.items.collect {|e| e.passenger_children.to_i } )
+g.data("Active", list.items.collect {|e| e.passenger_active.to_i } )
+g.data("Inactive", list.items.collect {|e| e.passenger_inactive.to_i } )
+g.write('passenger_children.png')
+
+g = Gruff::Line.new(800)
+g.title = "Load Average"
+g.data("Load", list.items.collect {|e| (e.load_average).to_f } )
+g.write('load_average.png')
+
+g = Gruff::Line.new(800)
+g.title = "Active Children and Load"
+g.data("Active Children", list.items.collect {|e| (e.passenger_active).to_f } )
+g.data("Load", list.items.collect {|e| (e.load_average).to_f } )
+g.write('active_and_load.png')
+
+g = Gruff::Line.new(800)
+g.title = "Passenger Queue Size"
+g.data("Queu", list.items.collect {|e| e.passenger_queue.to_i } )
+g.write('passenger_queue.png')
+
+g = Gruff::Line.new(800)
+g.title = "Memory Usage"
+g.data("Mb", list.items.collect {|e| (e.mem_used.to_i/1024).to_i } )
+g.write('memory_usage.png')
+
+g = Gruff::Line.new(800)
+g.title = "Memcached Memory"
+g.data("Current", list.items.collect {|e| e.memcached_current.to_i } )
+g.data("Max", list.items.collect {|e| e.memcached_max.to_i } )
+g.write('memcached_memory.png')
+
+g = Gruff::Line.new(800)
+g.title = "IO Throughput"
+g.data("IO MB/s", list.items.collect {|e| (e.io).to_f } )
+g.write('io_throughput.png')
+
+`open *.png`

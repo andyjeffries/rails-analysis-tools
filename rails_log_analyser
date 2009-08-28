@@ -1,0 +1,150 @@
+#!/usr/bin/env ruby
+
+require 'pp'
+require 'rubygems'
+require 'progressbar'
+
+module Rails
+  module LogAnalyser
+    class Entry
+      attr_accessor :process_id
+      attr_accessor :action
+      attr_accessor :status
+      attr_accessor :messages
+      attr_accessor :time
+      attr_accessor :time_spent
+  
+      def initialize(process_id, action, time)
+        self.process_id = process_id
+        self.action = action
+        self.time = time
+        self.messages = []
+      end
+      
+      def <<(message)
+        self.messages << message
+      end
+    end
+
+    class List
+      attr_accessor :transactions
+      
+      def initialize
+        @current_transactions = {}
+        @transactions = []
+      end
+      
+      def start_transaction(process_id, action, time, message)
+        complete_transaction(process_id)
+        @current_transactions[process_id] = Rails::LogAnalyser::Entry.new(process_id, action, time)
+        continue_transaction(process_id, message, message)
+      end
+      
+      def continue_transaction(process_id, message, line)
+        if !process_id
+          process_id = @last_process_id
+        else
+          @last_process_id = process_id
+        end
+        if message =~ /Completed in (\d+)ms/ && @current_transactions[process_id]
+          @current_transactions[process_id].time_spent = $1.to_i
+          message =~ /.*?\|\s+(\d+)/
+          @current_transactions[process_id].status = $1
+        elsif message =~ /Rendering .* \((\d+)\)/
+          @current_transactions[process_id].status = $1
+        elsif message.nil?
+          @current_transactions[process_id] << line if @current_transactions[process_id]
+        else
+          @current_transactions[process_id] << message if @current_transactions[process_id]
+        end
+      end
+
+      def complete_transaction(process_id)
+        @transactions << @current_transactions[process_id] if @current_transactions[process_id]
+        @current_transactions[process_id] = nil
+      end
+      
+      def complete_all_transactions
+        @current_transactions.keys.each do |process_id|
+          complete_transaction(process_id)
+        end
+      end
+      
+      def read(filename)
+        lines = `wc -l #{filename}`.to_i
+        pbar = ProgressBar.new("Analysing", lines)
+        
+        next_line_is_process_marker = false
+        action = ""
+        time = ""
+        
+        File.open(filename, 'r').each do |line|
+          pbar.inc
+          process_id = nil
+          message = nil
+          if line =~ /\[(\d+)\] (.*)/
+            process_id = $1
+            message = $2
+          end
+          
+          if next_line_is_process_marker 
+            start_transaction(process_id, action, time, message)
+            next_line_is_process_marker = false
+          elsif line =~ /Processing ([^ ]+).*\(.*at ([0-9 :-]+)\)/
+            action = $1
+            time = $2
+            next_line_is_process_marker = true
+          else
+            continue_transaction(process_id, message, line)
+          end
+        end
+        complete_all_transactions
+        pbar.finish
+      end
+      
+    end
+  end
+end
+
+#--------------------------------------------------------------------------------
+
+filename = ARGV[0]
+log = Rails::LogAnalyser::List.new
+log.read(filename)
+
+# List transactions
+# -l
+# 
+# Show transaction
+# -s
+
+if ARGV[1] == '-l'
+  log.transactions.each_with_index do |tran, index|
+    puts "%4d : %-40s %14s (%dms %d)" % [index, tran.action, tran.time, tran.time_spent, tran.status]
+  end
+elsif ARGV[1] == '-ls'
+  log.transactions.sort {|a,b| a.time.gsub('ms', '').to_i <=> b.time.gsub('ms', '').to_i}.each do |tran, index|
+    puts "%4d : %-40s %14s (%dms)" % [index, tran.action, tran.time, tran.time_spent]
+  end  
+elsif ARGV[1] == '-s'
+  ids = ARGV[2..10000].map {|x| x.to_i}
+  ids.each do |transaction_id|
+    tran = log.transactions[transaction_id]
+    puts "%4d : %-40s %14s" % [transaction_id, tran.action, tran.time]
+    puts "-" * 62
+    puts tran.messages
+    puts
+  end
+end
+
+
+# 
+# top_10 = list.top_size(100)
+# puts "Top 10 URLs by size".upcase
+# puts
+# puts "%-40s %19s" % ["URL", "Size/B"]
+# puts "-" * 60
+# top_10.each do |url,size|
+#   puts "%-40s %19s" % [url, size.to_s]
+# end
+# 

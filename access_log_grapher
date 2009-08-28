@@ -1,0 +1,79 @@
+#!/usr/bin/env ruby
+
+require 'rubygems'
+require 'progressbar'
+require 'gruff'
+
+module Apache
+  module Log
+    class Entry
+      attr_accessor :method
+      attr_accessor :url
+      attr_accessor :status
+      attr_accessor :size
+      attr_accessor :time_sec
+      attr_accessor :time_usec
+      attr_accessor :time_passenger
+  
+      def initialize(params)
+        params.each do |k,v|
+          self.send("#{k}=", v)
+        end
+      end      
+    end
+
+    class List
+      attr_reader :items
+      
+      def initialize
+        @items = []
+      end
+      
+      def read(filename)
+        lines = `wc -l #{filename}`.to_i
+        pbar = ProgressBar.new("Analysing", lines)
+        
+        File.open(filename, 'r').each do |line|
+          if line =~ /"(GET|POST) ([^ ]+).*?" (\d+) (\d+) .*? (\d+)\/(\d+) "(\d+)"/
+            entry = Entry.new(:method => $1, :url => $2, :status => $3, :size => $4, :time_sec => $5, :time_usec => $6, :time_passenger => $7)
+            @items << entry
+          end
+          pbar.inc
+        end
+        pbar.finish
+      end
+      
+      def to_url_size_hash
+        hash = {}
+        @items.each do |item|
+          if hash[item.url].nil? || hash[item.url].to_i < item.size.to_i
+            hash[item.url] = item.size.to_i
+          end
+        end
+        hash
+      end
+      
+      def top_size(number)
+        items = to_url_size_hash
+        items.sort {|a,b| a[1] <=> b[1]}.reverse[0..number]
+      end
+      
+    end
+  end
+end
+
+#--------------------------------------------------------------------------------
+
+filename = ARGV[0]
+list = Apache::Log::List.new
+list.read(filename)
+
+g = Gruff::Line.new(800)
+g.title = "Response times"
+g.data("Time/ms", list.items.collect {|e| (e.time_usec.to_i/1000).to_i } )
+#g.labels = {0 => '2003', 2 => '2004', 4 => '2005'}
+g.write('response_times.png')
+g.hide_lines = true
+g.write('response_times_no_lines.png')
+
+`open *.png`

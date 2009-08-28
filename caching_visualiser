@@ -1,0 +1,114 @@
+#!/usr/bin/env ruby
+
+class ANSI
+  def self.set_cursor(x=1, y=1)
+    puts "\033[1;#{x};#{y}H"
+  end
+  
+  def self.clear_screen
+    puts "\033[1;2J"
+  end
+  
+  def self.red(text)
+    "\033[31m#{text}\033[0m"
+  end
+  
+  def self.blue(text)
+    "\033[34m#{text}\033[0m"
+  end
+  
+  def self.green(text)
+    "\033[32m#{text}\033[0m"
+  end
+  
+  def self.yellow(text)
+    "\033[33m#{text}\033[0m"
+  end
+end
+
+class ProcessStatus
+  attr_accessor :message
+  attr_accessor :url
+  attr_accessor :last_accessed
+  
+  def initialize(message, url, position)
+    @message = message
+    @url = url
+    @last_accessed = position
+  end
+end
+
+class Visualiser
+  def initialize
+    @processes = {}
+    @time = ""
+    @position = 0
+    ANSI.clear_screen
+  end
+  
+  def process_file(filename)
+    File.open(ARGV[0], "r").each do |line|
+      next unless line =~ /CACHING_MIDDLEWARE/
+      next if line =~ /Not cacheable/
+      parse_line(line)
+      @position += 1
+      display
+    end
+  end
+  
+  def parse_line(line)
+    # [hpbl20050] [2009-08-21 14:06:03] [24040] [WARN] CACHING_MIDDLEWARE Using cached version [/sports/highlight_block]
+    if line =~ /\[.*?\] \[(.*?)\] \[(\d+)\] .*CACHING_MIDDLEWARE.*? (.*?) \[(.*?)\]/
+      @time = $1
+      status = @processes[$2]
+      if status
+        status.message = $3
+        status.url = $4
+        status.last_accessed = @position
+      else
+        status = ProcessStatus.new($3, $4, @position)
+      end
+      @processes[$2] = status
+    end
+  end
+  
+  def display
+    ANSI.set_cursor
+    puts "#{@time} (#{@position})"
+    
+    @processes.sort.each do |pid, status|
+      puts "%6s: %-60s %-20s %40s" % [pid, nice_status(status.message), status.url, " "*40]
+    end
+    
+    @sleep = 0
+    case @position
+    when 34000..36500
+      @sleep = 0.4
+    when 36500..50000
+      @sleep = 0.4
+    end
+    
+    sleep @sleep
+    reap_old_processes
+  end
+  
+  def nice_status(status)
+    if status =~ /lock/
+      ANSI.red(status)
+    elsif status =~ /generating/
+      ANSI.yellow(status)
+    elsif status =~ /seconds/
+      ANSI.green(status)
+    else
+      status
+    end
+  end
+  
+  def reap_old_processes
+    @processes.delete_if do |pid, status|
+      status.last_accessed < @position - 500
+    end 
+  end
+end
+  
+Visualiser.new.process_file(ARGV[0])

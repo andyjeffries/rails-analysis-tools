@@ -1,0 +1,44 @@
+#!/usr/bin/env ruby
+
+require 'rubygems'
+require 'progressbar'
+require 'gruff'
+
+module Apache
+  module Log
+    class List
+      attr_reader :items
+      
+      def initialize
+        @items = []
+      end
+      
+      def read(filename)
+        lines = `wc -l #{filename}`.to_i
+        pbar = ProgressBar.new("Analysing", lines)
+        
+        `cat #{filename} | cut -d' ' -f 23|cut -d'/' -f 2`.each do |line|
+          @items << line.chomp.to_i
+          pbar.inc
+        end
+        pbar.finish
+      end
+    end
+  end
+end
+
+#--------------------------------------------------------------------------------
+
+filename = ARGV[0]
+list = Apache::Log::List.new
+list.read(filename)
+
+g = Gruff::Line.new(800)
+g.title = "Response times"
+g.data("Time/ms", list.items)
+#g.labels = {0 => '2003', 2 => '2004', 4 => '2005'}
+g.write('response_times.png')
+g.hide_lines = true
+g.write('response_times_no_lines.png')
+
+`open *.png`
