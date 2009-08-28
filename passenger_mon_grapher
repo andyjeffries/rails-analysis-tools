@@ -4,7 +4,7 @@ require 'rubygems'
 require 'progressbar'
 require 'gruff'
 
-module FDJ
+module LVS
   module Monitor
     class Entry
       attr_accessor :date
@@ -80,7 +80,7 @@ end
 #--------------------------------------------------------------------------------
 
 filename = ARGV[0]
-list = FDJ::Monitor::List.new
+list = LVS::Monitor::List.new
 list.read(filename)
 
 g = Gruff::Line.new(800)
