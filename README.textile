@@ -6,11 +6,11 @@ h2. Rails Log Analyser
 
 This is one of the best utilities!  A Rails log often gets lines from different requests interleaved within each other, making it difficult to see what a particular request logged.  This utility sorts this out.  There are two ways of using this:
 
-  ./rails_log_analyser production.log -l
+  <pre><code>./rails_log_analyser production.log -l</code></pre>
 
 Which will output for each request: an id, the Controller/Action, the time taken and the status code.  You can then view the log output for one or more of these requests with:
 
-  ./rails_log_analyser production.log -s 243 1012
+  <pre><code>./rails_log_analyser production.log -s 243 1012</code></pre>
 
 Where the numbers are the ids are the ids given in the -l output.
 
@@ -18,15 +18,15 @@ h2. Passenger DTrace script
 
 This dtrace script prints out a summary of times spent in each method, sorted by total time with a file and count.  The way I use it is to do the following (from a Rails application):
 
-touch tmp/restart.txt
+<pre><code>touch tmp/restart.txt
 curl http://my-local-domain/controller/action
 sudo passenger-status
-(find out passenger pid)
-sudo dtrace -s rb_linetime.d -p $pid > log
+# (find out passenger pid)
+sudo dtrace -s rb_linetime.d -p $pid > log</code></pre>
 
 Then in another window do:
 
-curl http://my-local-domain/controller/action
+<pre><code>curl http://my-local-domain/controller/action</code></pre>
 
 Then Ctrl-C the dtrace window when it finishes.  Up until now I've been "grep -v"ing Ruby.framework, vendor/rails, (eval), gems to just try to get to the main code.  I know there will be bits where we call a standard Ruby method far too many times, or likely the same in the Rails framework, but for now I'm concentrating on the big hitters so this serves me well.
 
@@ -34,17 +34,17 @@ h2. Access Log Request Sizer
 
 This utility is simply run with the name of an Apache log file (in common format) after it and it will print out the top 20 URLs based on the size of the request:
 
-  ./access_log_request_sizer access.log_20090825
+  <pre><code>./access_log_request_sizer access.log_20090825</code></pre>
 
 h2. Access Log Grapher
 
 Using a log format like the following:
 
-  LogFormat "%v:%p %h %{X-Forward-For}i %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\" %T/%D \"%{X-Runtime}o\"" passenger_combined
+  <pre><code>LogFormat "%v:%p %h %{X-Forward-For}i %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\" %T/%D \"%{X-Runtime}o\"" passenger_combined</code></pre>
 
 This utility will produce a graph of Response times, using the "Gruff":http://nubyonrails.com/pages/gruff library, and open it using the 'open' command on your (Mac OS X) system.
 
-  ./access_log_grapher access.log_20090825
+  <pre><code>./access_log_grapher access.log_20090825</code></pre>
 
 h2. Caching Visualiser
 
@@ -52,11 +52,11 @@ At LVS we have some Rails Middleware (not sure if I'm allowed to release that co
 
 It works best if you fly through it and note where things start going crazy, then edit the script and slow down that region.
 
-  ./caching_visualiser production.log
+  <pre><code>./caching_visualiser production.log</code></pre>
 
 h2. Passenger Sampler Analyser
 
 This is really only an internal use tool (for the LVSers that visit this page).  We have a script called sample.rb that we run in a sleeping while loop to sample things like Passenger children usage, load average, etc.  This tool takes those stats and graphs them nicely, opening the result as per Access Log Grapher.
 
-  ./passenger_mon_grapher data.csv
+  <pre><code>./passenger_mon_grapher data.csv</code></pre>
 
